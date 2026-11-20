@@ -1,0 +1,64 @@
+name: Update metal prices
+
+on:
+  schedule:
+    # LME official prices are set around 13:25 London time.
+    - cron: "30 15 * * 1-5"   # 21:00 IST, Monday to Friday
+    - cron: "30 2 * * 2-6"    # 08:00 IST next morning, catches late updates
+  workflow_dispatch:
+    inputs:
+      years:
+        description: "Years to fetch, space separated (blank = current year). Use for backfill, e.g. 2024 2025 2026"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-prices
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run parser self-test
+        run: python scripts/test_updater.py
+
+      - name: Fetch prices and rebuild data
+        id: fetch
+        continue-on-error: true
+        env:
+          YEARS: ${{ github.event.inputs.years }}
+        run: |
+          if [ -n "$YEARS" ]; then
+            python scripts/update_prices.py --years $YEARS
+          else
+            python scripts/update_prices.py
+          fi
+
+      - name: Commit updated data
+        run: |
+          git config user.name "price-bot"
+          git config user.email "price-bot@users.noreply.github.com"
+          git add data/
+          if git diff --cached --quiet; then
+            echo "No new prices today."
+          else
+            git commit -m "Update prices $(date -u +%Y-%m-%d)"
+            git push
+          fi
+
+      - name: Fail the run if a source could not be read
+        if: steps.fetch.outcome == 'failure'
+        run: |
+          echo "One or more price sources failed. See the fetch step log." >&2
+          exit 1

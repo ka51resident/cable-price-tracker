@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Cable Metal Price Tracker</title>
+<style>
+  :root {
+    color-scheme: light;
+    --page: #f5f4f1; --surface: #fcfcfb; --border: #e3e1da; --grid: #ebe9e3;
+    --text: #0b0b0b; --text-2: #52514e; --text-3: #7b7a74;
+    --cu: #eb6834; --al: #2a78d6; --avg: #8a8984;
+    --accent: #1f5fb0; --accent-ink: #ffffff;
+    --ok-bg: #e7f3e7; --ok-ink: #0b5d0b; --warn-bg: #fdecd2; --warn-ink: #7a4a00; --info-bg: #e6eefa; --info-ink: #174a8c;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      color-scheme: dark;
+      --page: #121211; --surface: #1a1a19; --border: #32312e; --grid: #2a2927;
+      --text: #f0efec; --text-2: #c3c2b7; --text-3: #94938a;
+      --cu: #d95926; --al: #3987e5; --avg: #8f8e86;
+      --accent: #6aa5ee; --accent-ink: #0b0b0b;
+      --ok-bg: #163016; --ok-ink: #9fdc9f; --warn-bg: #3a2a0c; --warn-ink: #f2c879; --info-bg: #14263f; --info-ink: #a9c9f5;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--page); color: var(--text);
+         font: 15px/1.5 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 1080px; margin: 0 auto; padding: 24px 16px 56px; }
+  h1 { font-size: 22px; margin: 0 0 2px; letter-spacing: -0.01em; }
+  h2 { font-size: 16px; margin: 0 0 12px; }
+  .sub { color: var(--text-2); margin: 0 0 20px; font-size: 14px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; margin-bottom: 16px; }
+  .tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 16px; margin-bottom: 16px; }
+  .tile { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 16px; }
+  .tile .label { display: flex; align-items: center; gap: 8px; color: var(--text-2); font-size: 13px; font-weight: 600; }
+  .swatch { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+  .tile .big { font-size: 28px; font-weight: 650; letter-spacing: -0.02em; margin: 6px 0 0; font-variant-numeric: tabular-nums; }
+  .tile .unit { font-size: 14px; font-weight: 500; color: var(--text-2); }
+  .tile .small { color: var(--text-2); font-size: 13px; font-variant-numeric: tabular-nums; }
+  .tile dl { display: grid; grid-template-columns: 1fr auto; gap: 2px 12px; margin: 10px 0 0; font-size: 13px; }
+  .tile dt { color: var(--text-2); } .tile dd { margin: 0; text-align: right; font-variant-numeric: tabular-nums; }
+  .banner { border-radius: 10px; padding: 10px 14px; margin-bottom: 16px; font-size: 14px; background: var(--warn-bg); color: var(--warn-ink); }
+  .row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+  .seg { display: inline-flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+  .seg button { border: 0; background: transparent; color: var(--text-2); padding: 5px 11px; font: inherit; font-size: 13px; cursor: pointer; }
+  .seg button + button { border-left: 1px solid var(--border); }
+  .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
+  .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
+  .chart h3 { font-size: 14px; margin: 0 0 2px; }
+  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--text-2); margin-bottom: 4px; }
+  .legend i { display: inline-block; width: 16px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 5px; }
+  .legend i.dash { border-top-style: dashed; }
+  .plot { position: relative; }
+  .plot svg { display: block; width: 100%; height: 230px; }
+  .plot text { fill: var(--text-3); font-size: 11px; }
+  .tip { position: absolute; pointer-events: none; background: var(--surface); border: 1px solid var(--border); border-radius: 8px;
+         padding: 6px 9px; font-size: 12px; line-height: 1.4; white-space: nowrap; box-shadow: 0 2px 8px rgba(0,0,0,.12); display: none; font-variant-numeric: tabular-nums; }
+  .tip b { font-weight: 650; }
+  form.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+  fieldset { border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px 12px; margin: 0; grid-column: span 2; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; min-width: 0; }
+  legend { font-size: 13px; font-weight: 600; padding: 0 4px; }
+  label { display: block; font-size: 12px; color: var(--text-2); font-weight: 600; }
+  input, select { width: 100%; margin-top: 3px; padding: 7px 8px; font: inherit; font-size: 14px; color: var(--text);
+                  background: var(--page); border: 1px solid var(--border); border-radius: 7px; }
+  input:focus, select:focus, button:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .hint { font-size: 12px; color: var(--text-3); font-weight: 400; }
+  .btn { border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 8px; padding: 7px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+  .result { margin-top: 16px; }
+  .verdict { border-radius: 8px; padding: 10px 14px; font-size: 15px; margin-bottom: 12px; }
+  .verdict.ok { background: var(--ok-bg); color: var(--ok-ink); }
+  .verdict.high { background: var(--warn-bg); color: var(--warn-ink); }
+  .verdict.low, .verdict.info { background: var(--info-bg); color: var(--info-ink); }
+  .scroll { overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; font-size: 13px; font-variant-numeric: tabular-nums; }
+  th, td { padding: 6px 10px; text-align: right; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  th { color: var(--text-2); font-weight: 600; font-size: 12px; }
+  th:first-child, td:first-child { text-align: left; }
+  tfoot td { font-weight: 650; border-bottom: 0; }
+  .notes { color: var(--text-2); font-size: 13px; }
+  .notes li { margin-bottom: 4px; }
+  .muted { color: var(--text-3); }
+  @media (max-width: 560px) { fieldset { grid-column: span 1; grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<main>
+  <h1>Cable Metal Price Tracker</h1>
+  <p class="sub" id="asof">Loading prices…</p>
+  <div id="banner"></div>
+
+  <section class="tiles" id="tiles" aria-label="Latest prices"></section>
+
+  <section class="card" aria-label="Price trend">
+    <div class="row">
+      <h2 style="margin:0">Trend</h2>
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <div class="seg" id="unitSeg" role="group" aria-label="Unit">
+          <button type="button" data-unit="inr" aria-pressed="true">Rs/kg</button>
+          <button type="button" data-unit="usd" aria-pressed="false">USD/tonne</button>
+        </div>
+        <div class="seg" id="rangeSeg" role="group" aria-label="Period">
+          <button type="button" data-range="3m" aria-pressed="false">3M</button>
+          <button type="button" data-range="6m" aria-pressed="true">6M</button>
+          <button type="button" data-range="ytd" aria-pressed="false">This year</button>
+          <button type="button" data-range="all" aria-pressed="false">All</button>
+        </div>
+      </div>
+    </div>
+    <div class="charts">
+      <div class="chart"><h3>Copper</h3>
+        <div class="legend"><span><i style="border-color:var(--cu)"></i>Daily cash settlement</span><span><i class="dash" style="border-color:var(--avg)"></i>30-day average</span></div>
+        <div class="plot" id="plot-cu"></div></div>
+      <div class="chart"><h3>Aluminium</h3>
+        <div class="legend"><span><i style="border-color:var(--al)"></i>Daily cash settlement</span><span><i class="dash" style="border-color:var(--avg)"></i>30-day average</span></div>
+        <div class="plot" id="plot-al"></div></div>
+    </div>
+  </section>
+
+  <section class="card" aria-label="Quote checker">
+    <h2>Quote checker</h2>
+    <p class="sub" style="margin-bottom:14px">Enter a cable and an earlier rate. It shows how much the metal has moved since, and what that justifies per metre. Add the new rate to see the gap. Nothing you type here is saved or sent anywhere.</p>
+    <form class="grid" id="qc" onsubmit="return false">
+      <div><label>Conductor<select id="q-metal"><option value="cu">Copper</option><option value="al">Aluminium</option></select></label></div>
+      <div><label>Cores<select id="q-cores"><option>1</option><option>2</option><option>3</option><option>3.5</option><option selected>4</option><option>5</option><option>6</option><option>7</option><option>12</option></select></label></div>
+      <div><label>Size (sq mm)<select id="q-size"></select></label></div>
+      <div><label>Quantity (m) <span class="hint">optional</span><input id="q-qty" type="number" min="0" step="any" inputmode="decimal"></label></div>
+      <fieldset><legend>Earlier quote</legend>
+        <label>Date<input id="q-dateA" type="date" required></label>
+        <label>Rate (Rs/m)<input id="q-rateA" type="number" min="0" step="any" inputmode="decimal" required></label>
+      </fieldset>
+      <fieldset><legend>New quote</legend>
+        <label>Date<input id="q-dateB" type="date" required></label>
+        <label>Rate (Rs/m) <span class="hint">optional</span><input id="q-rateB" type="number" min="0" step="any" inputmode="decimal"></label>
+      </fieldset>
+      <div><label>Price basis<select id="q-basis"><option value="day">Price on the day</option><option value="month">Monthly average</option></select></label></div>
+      <div><label>Duty + premium % <span class="hint">optional</span><input id="q-uplift" type="number" min="0" max="50" step="any" value="0" inputmode="decimal"></label></div>
+    </form>
+    <div class="result" id="q-result" aria-live="polite"></div>
+    <div id="q-listwrap" hidden>
+      <div class="row" style="margin-top:18px"><h2 style="margin:0">Lines checked</h2><button class="btn" type="button" id="q-clear">Clear list</button></div>
+      <div class="scroll"><table id="q-list"><thead><tr>
+        <th>Cable</th><th>Earlier</th><th>Rate</th><th>New</th><th>Rate</th><th>Metal justifies</th><th>Fair new rate</th><th>Gap /m</th><th>Gap %</th><th>Qty (m)</th><th>Gap total</th><th></th>
+      </tr></thead><tbody></tbody><tfoot></tfoot></table></div>
+    </div>
+  </section>
+
+  <section class="card" aria-label="Monthly averages">
+    <div class="row"><h2 style="margin:0">Monthly averages</h2><a class="btn" href="data/monthly_averages.csv" download>Download CSV</a></div>
+    <div class="scroll"><table id="monthly"><thead><tr>
+      <th>Month</th><th>Copper USD/t</th><th>Copper Rs/kg</th><th>Aluminium USD/t</th><th>Aluminium Rs/kg</th><th>USD/INR</th><th>Days</th>
+    </tr></thead><tbody></tbody></table></div>
+  </section>
+
+  <section class="card notes" aria-label="Notes">
+    <h2 style="color:var(--text)">How to read this</h2>
+    <ul>
+      <li><b>Rs/kg</b> is the LME cash settlement price multiplied by the USD/INR rate. It leaves out import duty, premiums and the cost of turning cathode into rod, so the Indian rod price is always higher. Use it to measure <b>change</b>, not the absolute level. The duty + premium field scales it if you want.</li>
+      <li><b>Metal content</b> uses nominal conductor area: 8.89 kg/km per sq mm for copper and 2.703 for aluminium. 3.5 core uses the standard reduced neutral. Screens, armour and insulation are not counted.</li>
+      <li><b>Gap</b> is the new rate minus what the earlier rate would be after the metal move. Gaps under 4% are treated as noise. Compare like with like: same make, same construction.</li>
+      <li>If a date falls on a holiday or weekend, the last trading day before it is used.</li>
+    </ul>
+    <p class="muted" id="sources"></p>
+  </section>
+</main>
+
+<script src="assets/calc.js"></script>
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var state = { daily: [], monthly: [], unit: "inr", range: "6m", list: [] };
+  var fmt0 = new Intl.NumberFormat("en-IN", { maximumFractionDigits: 0 });
+  var fmt2 = new Intl.NumberFormat("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  var MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  function niceDate(iso) { var p = iso.split("-"); return Number(p[2]) + " " + MONTHS[Number(p[1]) - 1] + " " + p[0]; }
+  function niceMonth(ym) { var p = ym.split("-"); return MONTHS[Number(p[1]) - 1] + " " + p[0]; }
+  function signed(n, f) { return (n > 0 ? "+" : n < 0 ? "−" : "") + f.format(Math.abs(n)); }
+  function pct(n) { return (n > 0 ? "+" : n < 0 ? "−" : "") + (Math.abs(n) * 100).toFixed(1) + "%"; }
+  function arrow(n) { return n > 0 ? "▲ " : n < 0 ? "▼ " : ""; }
+  function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]; }); }
+
+  function value(row, metal, unit) {
+    if (row[metal] == null) return null;
+    if (unit === "usd") return row[metal];
+    return row.fx == null ? null : row[metal] * row.fx / 1000;
+  }
+
+  /* ---------- tiles ---------- */
+  function renderTiles() {
+    var d = state.daily, last = d[d.length - 1], prev = d[d.length - 2];
+    var hasFx = last.fx != null;
+    var html = "";
+    [["cu", "Copper", "--cu"], ["al", "Aluminium", "--al"]].forEach(function (m) {
+      var key = m[0], unit = hasFx ? "inr" : "usd";
+      var now = value(last, key, unit), before = prev ? value(prev, key, unit) : null;
+      var series = d.map(function (r) { return value(r, key, unit); });
+      var ma = Calc.movingAverage(series, 30), ma30 = ma[ma.length - 1];
+      var ym = last.d.slice(0, 7), mrows = series.filter(function (v, i) { return d[i].d.slice(0, 7) === ym && v != null; });
+      var mavg = mrows.reduce(function (a, b) { return a + b; }, 0) / mrows.length;
+      var yrows = series.filter(function (v, i) { return d[i].d.slice(0, 4) === last.d.slice(0, 4) && v != null; });
+      var yavg = yrows.reduce(function (a, b) { return a + b; }, 0) / yrows.length;
+      var f = unit === "inr" ? fmt2 : fmt0, u = unit === "inr" ? "Rs/kg" : "USD/t";
+      function vs(ref) { return ref == null ? "n/a" : arrow(now - ref) + pct((now - ref) / ref); }
+      html += '<div class="tile"><div class="label"><span class="swatch" style="background:var(' + m[2] + ')"></span>' + m[1] + '</div>' +
+        '<div class="big">' + (unit === "inr" ? "₹" : "$") + f.format(now) + ' <span class="unit">' + (unit === "inr" ? "per kg" : "per tonne") + '</span></div>' +
+        '<div class="small">$' + fmt2.format(last[key]) + ' per tonne cash, $' + (last[key + "3"] == null ? "n/a" : fmt2.format(last[key + "3"])) + ' 3-month</div>' +
+        '<dl><dt>vs previous day</dt><dd>' + vs(before) + '</dd>' +
+        '<dt>vs 30-day average (' + (ma30 == null ? "n/a" : f.format(ma30)) + ')</dt><dd>' + vs(ma30) + '</dd>' +
+        '<dt>' + niceMonth(ym) + ' average so far</dt><dd>' + f.format(mavg) + ' ' + u + '</dd>' +
+        '<dt>' + last.d.slice(0, 4) + ' average so far</dt><dd>' + f.format(yavg) + ' ' + u + '</dd></dl></div>';
+    });
+    html += '<div class="tile"><div class="label">USD/INR</div>' +
+      '<div class="big">' + (hasFx ? "₹" + fmt2.format(last.fx) : "n/a") + ' <span class="unit">per US dollar</span></div>' +
+      '<div class="small">Reference rate used for the Rs/kg conversion</div>' +
+      '<dl><dt>Every ₹1 move shifts copper by</dt><dd>₹' + fmt2.format(last.cu / 1000) + '/kg</dd>' +
+      '<dt>Every ₹1 move shifts aluminium by</dt><dd>₹' + fmt2.format(last.al / 1000) + '/kg</dd></dl></div>';
+    $("tiles").innerHTML = html;
+    $("asof").textContent = "LME official cash settlement prices as of " + niceDate(last.d) + ". Updated automatically every weekday.";
+    var age = (Date.now() - new Date(last.d + "T00:00:00Z").getTime()) / 864e5;
+    var msgs = [];
+    if (age > 5) msgs.push("The latest price is from " + niceDate(last.d) + ". The daily update may have stopped. Check the Actions tab of the repository.");
+    if (!hasFx) msgs.push("Exchange rates have not loaded yet, so prices are shown in USD only and the quote checker is unavailable until the first update runs.");
+    $("banner").innerHTML = msgs.map(function (t) { return '<div class="banner">' + esc(t) + '</div>'; }).join("");
+  }
+
+  /* ---------- charts ---------- */
+  function rangeRows() {
+    var d = state.daily, last = d[d.length - 1].d, from = "0000";
+    if (state.range === "ytd") from = last.slice(0, 4) + "-01-01";
+    else if (state.range !== "all") {
+      var dt = new Date(last + "T00:00:00Z"); dt.setUTCMonth(dt.getUTCMonth() - (state.range === "3m" ? 3 : 6));
+      from = dt.toISOString().slice(0, 10);
+    }
+    return from;
+  }
+  function niceTicks(lo, hi, n) {
+    var span = hi - lo || 1, step = Math.pow(10, Math.floor(Math.log10(span / n))), err = span / n / step;
+    step *= err >= 7.5 ? 10 : err >= 3.5 ? 5 : err >= 1.5 ? 2 : 1;
+    var out = []; for (var v = Math.ceil(lo / step) * step; v <= hi + 1e-9; v += step) out.push(v);
+    return out;
+  }
+  function drawChart(el, metal, colorVar) {
+    var unit = state.unit, all = state.daily;
+    var series = all.map(function (r) { return value(r, metal, unit); });
+    var maAll = Calc.movingAverage(series, 30);
+    var from = rangeRows(), rows = [], vals = [], ma = [];
+    all.forEach(function (r, i) { if (r.d >= from && series[i] != null) { rows.push(r); vals.push(series[i]); ma.push(maAll[i]); } });
+    if (rows.length < 2) { el.innerHTML = '<p class="muted">Not enough data for this view yet.</p>'; return; }
+    var W = Math.max(300, el.clientWidth), H = 230, L = unit === "inr" ? 46 : 54, R = 10, T = 10, B = 24;
+    var pool = vals.concat(ma.filter(function (v) { return v != null; }));
+    var lo = Math.min.apply(null, pool), hi = Math.max.apply(null, pool), pad = (hi - lo) * 0.08 || 1;
+    lo -= pad; hi += pad;
+    var x = function (i) { return L + (W - L - R) * i / (rows.length - 1); };
+    var y = function (v) { return T + (H - T - B) * (1 - (v - lo) / (hi - lo)); };
+    var f = unit === "inr" ? fmt0 : fmt0;
+    var svg = '<svg viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="' + (metal === "cu" ? "Copper" : "Aluminium") + ' price trend">';
+    niceTicks(lo, hi, 4).forEach(function (t) {
+      svg += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(t) + '" y2="' + y(t) + '" stroke="var(--grid)"/>' +
+             '<text x="' + (L - 6) + '" y="' + (y(t) + 4) + '" text-anchor="end">' + f.format(t) + '</text>';
+    });
+    var lastLabelX = -99;
+    rows.forEach(function (r, i) {
+      if (i && r.d.slice(0, 7) !== rows[i - 1].d.slice(0, 7) && x(i) - lastLabelX > 38) {
+        var mo = Number(r.d.slice(5, 7));
+        svg += '<text x="' + x(i) + '" y="' + (H - 6) + '" text-anchor="middle">' + MONTHS[mo - 1] + (mo === 1 ? " " + r.d.slice(2, 4) : "") + '</text>';
+        lastLabelX = x(i);
+      }
+    });
+    function path(arr) { var p = "", pen = false; arr.forEach(function (v, i) { if (v == null) { pen = false; return; } p += (pen ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1); pen = true; }); return p; }
+    svg += '<path d="' + path(ma) + '" fill="none" stroke="var(--avg)" stroke-width="1.5" stroke-dasharray="5 4"/>' +
+           '<path d="' + path(vals) + '" fill="none" stroke="var(' + colorVar + ')" stroke-width="2" stroke-linejoin="round"/>' +
+           '<line class="xh" y1="' + T + '" y2="' + (H - B) + '" stroke="var(--text-3)" stroke-width="1" visibility="hidden"/>' +
+           '<circle class="dot" r="4.5" fill="var(' + colorVar + ')" stroke="var(--surface)" stroke-width="2" visibility="hidden"/>' +
+           '<rect class="hit" x="' + L + '" y="' + T + '" width="' + (W - L - R) + '" height="' + (H - T - B) + '" fill="transparent"/></svg><div class="tip"></div>';
+    el.innerHTML = svg;
+    var s = el.querySelector("svg"), xh = s.querySelector(".xh"), dot = s.querySelector(".dot"), tip = el.querySelector(".tip");
+    function move(ev) {
+      var box = s.getBoundingClientRect(), px = ((ev.touches ? ev.touches[0].clientX : ev.clientX) - box.left) * W / box.width;
+      var i = Math.max(0, Math.min(rows.length - 1, Math.round((px - L) / (W - L - R) * (rows.length - 1))));
+      xh.setAttribute("x1", x(i)); xh.setAttribute("x2", x(i)); xh.setAttribute("visibility", "visible");
+      dot.setAttribute("cx", x(i)); dot.setAttribute("cy", y(vals[i])); dot.setAttribute("visibility", "visible");
+      var u = unit === "inr" ? " Rs/kg" : " USD/t";
+      tip.innerHTML = niceDate(rows[i].d) + '<br><b>' + fmt2.format(vals[i]) + '</b>' + u + (ma[i] != null ? '<br>30-day avg ' + fmt2.format(ma[i]) : '');
+      tip.style.display = "block";
+      var left = x(i) * box.width / W + 12; if (left + tip.offsetWidth > box.width) left = x(i) * box.width / W - tip.offsetWidth - 12;
+      tip.style.left = left + "px"; tip.style.top = "8px";
+    }
+    function leave() { xh.setAttribute("visibility", "hidden"); dot.setAttribute("visibility", "hidden"); tip.style.display = "none"; }
+    s.addEventListener("mousemove", move); s.addEventListener("touchstart", move, { passive: true });
+    s.addEventListener("touchmove", move, { passive: true }); s.addEventListener("mouseleave", leave);
+  }
+  function renderCharts() { drawChart($("plot-cu"), "cu", "--cu"); drawChart($("plot-al"), "al", "--al"); }
+  function wireSeg(id, attr, key) {
+    $(id).addEventListener("click", function (ev) {
+      var b = ev.target.closest("button"); if (!b) return;
+      state[key] = b.getAttribute(attr);
+      Array.prototype.forEach.call($(id).querySelectorAll("button"), function (x) { x.setAttribute("aria-pressed", x === b ? "true" : "false"); });
+      renderCharts();
+    });
+  }
+
+  /* ---------- monthly table ---------- */
+  function renderMonthly() {
+    var last = state.daily[state.daily.length - 1].d.slice(0, 7);
+    function c(v, f) { return v == null ? "n/a" : f.format(v); }
+    $("monthly").querySelector("tbody").innerHTML = state.monthly.slice().reverse().map(function (m) {
+      return "<tr><td>" + niceMonth(m.m) + (m.m === last ? ' <span class="muted">(so far)</span>' : "") + "</td><td>" + c(m.cu, fmt0) + "</td><td>" + c(m.cu_inr, fmt2) +
+        "</td><td>" + c(m.al, fmt0) + "</td><td>" + c(m.al_inr, fmt2) + "</td><td>" + c(m.fx, fmt2) + "</td><td>" + m.days + "</td></tr>";
+    }).join("");
+  }
+
+  /* ---------- quote checker ---------- */
+  function readQuote() {
+    var cores = Number($("q-cores").value), size = Number($("q-size").value);
+    return {
+      metal: $("q-metal").value, cores: cores, size: size, area: Calc.conductorArea(cores, size),
+      dateA: $("q-dateA").value, rateA: Number($("q-rateA").value), dateB: $("q-dateB").value,
+      rateB: Number($("q-rateB").value), qty: Number($("q-qty").value),
+      basis: $("q-basis").value, upliftPct: Number($("q-uplift").value) || 0
+    };
+  }
+  function cableName(q) { return q.cores + "C x " + q.size + " sq mm " + (q.metal === "cu" ? "Cu" : "Al"); }
+  function usedLabel(p) { return p.basis === "month" ? niceMonth(p.used) + " average" : niceDate(p.used); }
+  function renderQuote() {
+    var q = readQuote(), out = $("q-result");
+    if (!q.dateA || !q.dateB || !(q.rateA > 0)) { out.innerHTML = '<p class="muted">Fill in the earlier quote date and rate to see the result.</p>'; return; }
+    if (!q.area) { out.innerHTML = '<div class="verdict info">3.5 core cable is not made in ' + q.size + ' sq mm. Pick 25 sq mm or larger, or another core count.</div>'; return; }
+    var r = Calc.checkQuote(state.daily, q);
+    if (!r) { out.innerHTML = '<div class="verdict info">No price data on or before one of those dates. The history starts on ' + niceDate(state.daily[0].d) + '.</div>'; return; }
+    var metalName = q.metal === "cu" ? "Copper" : "Aluminium", v;
+    if (r.verdict === "ok") v = '<div class="verdict ok"><b>✓ In line with the metal.</b> The new rate is ' + pct(r.gapPct) + ' against the fair rate of ₹' + fmt2.format(r.justifiedRateB) + '/m. Under 4% is treated as noise.</div>';
+    else if (r.verdict === "high") v = '<div class="verdict high"><b>⚠ Higher than the metal explains.</b> ₹' + fmt2.format(r.gap) + '/m (' + pct(r.gapPct) + ') above the fair rate of ₹' + fmt2.format(r.justifiedRateB) + '/m' + (r.gapTotal != null ? ', or ₹' + fmt0.format(r.gapTotal) + ' on ' + fmt0.format(r.qty) + ' m' : '') + '. Ask the vendor why.</div>';
+    else if (r.verdict === "low") v = '<div class="verdict low"><b>↓ Lower than the metal explains.</b> ₹' + fmt2.format(-r.gap) + '/m (' + pct(r.gapPct) + ') below the fair rate of ₹' + fmt2.format(r.justifiedRateB) + '/m' + (r.gapTotal != null ? ', or ₹' + fmt0.format(-r.gapTotal) + ' on ' + fmt0.format(r.qty) + ' m' : '') + '. The earlier quote was likely the expensive one.</div>';
+    else v = '<div class="verdict info"><b>Fair rate on the new date: ₹' + fmt2.format(r.justifiedRateB) + '/m.</b> ' + metalName + ' justifies a change of ' + signed(r.justifiedChange, fmt2) + ' per metre from ₹' + fmt2.format(q.rateA) + '.</div>';
+    var rows = [
+      ["Metal in the cable", fmt0.format(q.area) + " sq mm, " + r.kgPerM.toFixed(4) + " kg/m", ""],
+      [metalName + " price", "₹" + fmt2.format(r.a.inr) + "/kg", "₹" + fmt2.format(r.b.inr) + "/kg"],
+      ["LME cash and USD/INR", "$" + fmt0.format(r.a.usd) + " at " + fmt2.format(r.a.fx), "$" + fmt0.format(r.b.usd) + " at " + fmt2.format(r.b.fx)],
+      ["Metal value per metre", "₹" + fmt2.format(r.metalValueA), "₹" + fmt2.format(r.metalValueB)],
+      ["Quoted rate per metre", "₹" + fmt2.format(q.rateA), r.rateB ? "₹" + fmt2.format(r.rateB) : "n/a"],
+      ["Everything except metal", "₹" + fmt2.format(r.nonMetalA) + " (" + ((1 - r.metalShareA) * 100).toFixed(0) + "%)", r.rateB ? "₹" + fmt2.format(r.nonMetalB) + " (" + ((1 - r.metalValueB / r.rateB) * 100).toFixed(0) + "%)" : "n/a"]
+    ];
+    var t = '<div class="scroll"><table><thead><tr><th>' + esc(cableName(q)) + '</th><th>Earlier: ' + usedLabel(r.a) + '</th><th>New: ' + usedLabel(r.b) + '</th></tr></thead><tbody>' +
+      rows.map(function (x) { return "<tr><td>" + x[0] + "</td><td>" + x[1] + "</td><td>" + x[2] + "</td></tr>"; }).join("") +
+      '</tbody><tfoot><tr><td>Metal move justifies</td><td colspan="2">' + signed(r.justifiedChange, fmt2) + ' per metre' + (r.justifiedTotal != null ? ' (' + signed(r.justifiedTotal, fmt0) + ' on ' + fmt0.format(r.qty) + ' m)' : '') +
+      (r.rateB ? '; the rate actually moved ' + signed(r.actualChange, fmt2) : '') + '</td></tr></tfoot></table></div>';
+    var warn = r.metalShareA > 1 ? '<p class="muted">The metal value is higher than the quoted rate. Check the cable size, the conductor metal and the rate.</p>' : '';
+    out.innerHTML = v + t + warn + '<p style="margin:12px 0 0"><button class="btn" type="button" id="q-add">Add this line to the list</button></p>';
+    $("q-add").addEventListener("click", function () { state.list.push({ q: q, r: r }); renderList(); });
+  }
+  function renderList() {
+    var wrap = $("q-listwrap"); wrap.hidden = !state.list.length; if (!state.list.length) return;
+    var total = 0, any = false;
+    $("q-list").querySelector("tbody").innerHTML = state.list.map(function (it, i) {
+      var q = it.q, r = it.r; if (r.gapTotal != null) { total += r.gapTotal; any = true; }
+      return "<tr><td>" + esc(cableName(q)) + "</td><td>" + usedLabel(r.a) + "</td><td>" + fmt2.format(q.rateA) + "</td><td>" + usedLabel(r.b) + "</td><td>" + (r.rateB ? fmt2.format(r.rateB) : "n/a") +
+        "</td><td>" + signed(r.justifiedChange, fmt2) + "</td><td>" + fmt2.format(r.justifiedRateB) + "</td><td>" + (r.rateB ? signed(r.gap, fmt2) : "n/a") + "</td><td>" + (r.rateB ? pct(r.gapPct) : "n/a") +
+        "</td><td>" + (r.qty ? fmt0.format(r.qty) : "n/a") + "</td><td>" + (r.gapTotal != null ? signed(r.gapTotal, fmt0) : "n/a") + '</td><td><button class="btn" type="button" data-rm="' + i + '" aria-label="Remove line">×</button></td></tr>';
+    }).join("");
+    $("q-list").querySelector("tfoot").innerHTML = any ? '<tr><td colspan="10">Total gap on lines with a new rate and quantity</td><td>' + signed(total, fmt0) + "</td><td></td></tr>" : "";
+  }
+
+  /* ---------- start ---------- */
+  function start(data) {
+    state.daily = data.daily; state.monthly = data.monthly;
+    $("q-size").innerHTML = Calc.SIZES.map(function (s) { return "<option" + (s === 25 ? " selected" : "") + ">" + s + "</option>"; }).join("");
+    var first = state.daily[0].d, last = state.daily[state.daily.length - 1].d;
+    ["q-dateA", "q-dateB"].forEach(function (id) { $(id).min = first; });
+    $("q-dateB").value = last;
+    $("sources").textContent = "Sources: " + data.sources.metals + ". " + data.sources.fx + ". For internal reference only, not for trading. Data file: data/prices.json.";
+    if (state.daily[state.daily.length - 1].fx == null) {
+      state.unit = "usd";
+      Array.prototype.forEach.call($("unitSeg").querySelectorAll("button"), function (b) { b.setAttribute("aria-pressed", b.getAttribute("data-unit") === "usd" ? "true" : "false"); });
+    }
+    renderTiles(); renderCharts(); renderMonthly(); renderQuote();
+    wireSeg("unitSeg", "data-unit", "unit"); wireSeg("rangeSeg", "data-range", "range");
+    $("qc").addEventListener("input", renderQuote);
+    $("q-clear").addEventListener("click", function () { state.list = []; renderList(); });
+    $("q-list").addEventListener("click", function (ev) { var b = ev.target.closest("[data-rm]"); if (b) { state.list.splice(Number(b.getAttribute("data-rm")), 1); renderList(); } });
+    var timer; window.addEventListener("resize", function () { clearTimeout(timer); timer = setTimeout(renderCharts, 150); });
+  }
+  if (window.__PRICES__) start(window.__PRICES__);
+  else fetch("data/prices.json", { cache: "no-cache" }).then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); }).then(start)
+    .catch(function () { $("asof").textContent = "Could not load the price data. Try reloading the page."; });
+})();
+</script>
+</body>
+</html>

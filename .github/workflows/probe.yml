@@ -1,0 +1,25 @@
+name: Probe extra sources
+on:
+  push:
+    branches: [probe-sources]
+permissions:
+  contents: read
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe
+        run: |
+          UA="cable-price-tracker/1.0 (+https://github.com/ka51resident/cable-price-tracker)"
+          for u in \
+            "https://stooq.com/q/d/l/?s=hg.f&i=d" \
+            "https://stooq.com/q/d/l/?s=ali.f&i=d" \
+            "https://stooq.com/q/l/?s=hg.f&f=sd2t2ohlcv&h&e=csv" \
+            "https://query1.finance.yahoo.com/v8/finance/chart/HG=F?range=1mo&interval=1d" \
+            "https://query1.finance.yahoo.com/v8/finance/chart/ALI=F?range=1mo&interval=1d" ; do
+            echo "=================== $u"
+            code=$(curl -sS -m 30 -A "$UA" -o out.txt -w "%{http_code}" "$u" || true)
+            echo "HTTP $code, bytes $(wc -c < out.txt)"
+            head -c 600 out.txt; echo; echo "...tail:"; tail -c 300 out.txt; echo
+          done

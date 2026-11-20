@@ -38,6 +38,20 @@ METALS = {
     "aluminium": ("LME_Al_cash", DATA / "lme_aluminium.csv", (500.0, 15000.0)),
 }
 
+# Optional comparison market: COMEX front-month futures (Yahoo Finance chart
+# data). Copper is quoted in USD per pound, aluminium in USD per tonne.
+# A failure here is reported as a warning and never blocks the LME update.
+COMEX_URL = "https://query1.finance.yahoo.com/v8/finance/chart/{symbol}?range={span}&interval=1d"
+COMEX = {
+    # key: (symbol, csv file, plausible range in the contract's own unit)
+    "copper": ("HG%3DF", DATA / "comex_copper.csv", (0.5, 30.0)),
+    "aluminium": ("ALI%3DF", DATA / "comex_aluminium.csv", (500.0, 15000.0)),
+}
+LB_PER_TONNE = 2204.62262
+
+# India reference entered by hand each month from the IEEMA circular.
+IEEMA_FILE = DATA / "ieema.csv"
+
 # FX source: Frankfurter (open API over central bank reference rates, no key).
 FX_URL = "https://api.frankfurter.dev/v1/{start}..?base=USD&symbols=INR"
 FX_FILE = DATA / "usdinr.csv"
@@ -187,12 +201,53 @@ def update_fx(start: str) -> int:
     return changed
 
 
+def parse_comex_chart(text: str, valid_range: tuple[float, float], today: dt.date) -> dict[str, float]:
+    """Returns {iso_date: settlement/close} from a Yahoo chart response.
+
+    Bars dated today or later are dropped because the session is still open.
+    """
+    result = json.loads(text)["chart"]["result"][0]
+    offset = int(result.get("meta", {}).get("gmtoffset", 0))
+    stamps = result.get("timestamp") or []
+    closes = result["indicators"]["quote"][0].get("close") or []
+    lo, hi = valid_range
+    out: dict[str, float] = {}
+    for stamp, close in zip(stamps, closes):
+        if not isinstance(close, (int, float)) or not (lo <= close <= hi):
+            continue
+        date = (dt.datetime(1970, 1, 1) + dt.timedelta(seconds=int(stamp) + offset)).date()
+        if date >= today:
+            continue
+        out[date.isoformat()] = float(close)
+    return out
+
+
+def update_comex(name: str, backfill: bool) -> int:
+    symbol, path, valid = COMEX[name]
+    existing = read_csv(path)
+    before = dict(existing)
+    span = "5y" if (backfill or not existing) else "1mo"
+    today = dt.datetime.now(dt.timezone.utc).date()
+    parsed = parse_comex_chart(http_get(COMEX_URL.format(symbol=symbol, span=span)), valid, today)
+    if not parsed:
+        raise RuntimeError(f"No COMEX {name} prices could be read.")
+    for date, close in parsed.items():
+        existing[date] = [f"{close:.4f}"]
+    write_csv(path, ["date", "close"], existing)
+    changed = sum(1 for d in existing if before.get(d) != existing[d])
+    print(f"comex {name}: {changed} new or changed, latest {max(existing)}")
+    return changed
+
+
 def build_outputs() -> None:
     """Merges the three CSVs into prices.json and monthly_averages.csv."""
     cu = read_csv(METALS["copper"][1])
     al = read_csv(METALS["aluminium"][1])
     fx = read_csv(FX_FILE)
     fx_dates = sorted(fx)
+    comex_cu = read_csv(COMEX["copper"][1])
+    comex_al = read_csv(COMEX["aluminium"][1])
+    ieema = read_csv(IEEMA_FILE)
 
     def num(row: list[str] | None, i: int) -> float | None:
         if not row or len(row) <= i or row[i] == "":
@@ -213,12 +268,15 @@ def build_outputs() -> None:
             "al": num(al.get(date), 0),
             "al3": num(al.get(date), 1),
             "fx": rate,
+            # COMEX in USD per tonne (copper converted from USD per pound).
+            "ccu": None if num(comex_cu.get(date), 0) is None else round(num(comex_cu.get(date), 0) * LB_PER_TONNE, 2),
+            "cal": num(comex_al.get(date), 0),
         })
 
     months: dict[str, dict[str, list[float]]] = {}
     for row in daily:
-        bucket = months.setdefault(row["d"][:7], {"cu": [], "al": [], "fx": [], "cu_inr": [], "al_inr": []})
-        for key in ("cu", "al", "fx"):
+        bucket = months.setdefault(row["d"][:7], {"cu": [], "al": [], "fx": [], "cu_inr": [], "al_inr": [], "ccu": [], "cal": []})
+        for key in ("cu", "al", "fx", "ccu", "cal"):
             if row[key] is not None:
                 bucket[key].append(row[key])
         if row["fx"] is not None:
@@ -239,6 +297,10 @@ def build_outputs() -> None:
             "fx": mean(b["fx"], 4),
             "cu_inr": mean(b["cu_inr"], 2),
             "al_inr": mean(b["al_inr"], 2),
+            "ccu": mean(b["ccu"], 2),
+            "cal": mean(b["cal"], 2),
+            "ie_cu": num(ieema.get(month), 0),
+            "ie_al": num(ieema.get(month), 1),
         }
         for month, b in sorted(months.items())
     ]
@@ -248,6 +310,8 @@ def build_outputs() -> None:
         "sources": {
             "metals": "Official LME cash settlement prices, USD per tonne, as published by Westmetall",
             "fx": "USD/INR reference rate via Frankfurter (central bank reference rates)",
+            "comex": "COMEX front-month futures daily close via Yahoo Finance chart data",
+            "ieema": "IEEMA monthly circular prices, entered by hand in data/ieema.csv",
         },
         "daily": daily,
         "monthly": monthly,
@@ -256,10 +320,13 @@ def build_outputs() -> None:
 
     with (DATA / "monthly_averages.csv").open("w", newline="") as f:
         writer = csv.writer(f, lineterminator="\n")
-        writer.writerow(["month", "trading_days", "copper_usd_per_t", "aluminium_usd_per_t",
-                         "usd_inr", "copper_inr_per_kg", "aluminium_inr_per_kg"])
+        writer.writerow(["month", "trading_days", "lme_copper_usd_per_t", "lme_aluminium_usd_per_t",
+                         "usd_inr", "lme_copper_inr_per_kg", "lme_aluminium_inr_per_kg",
+                         "comex_copper_usd_per_t", "comex_aluminium_usd_per_t",
+                         "ieema_copper_inr_per_kg", "ieema_aluminium_inr_per_kg"])
         for m in monthly:
-            writer.writerow([m["m"], m["days"], m["cu"], m["al"], m["fx"], m["cu_inr"], m["al_inr"]])
+            writer.writerow([m["m"], m["days"], m["cu"], m["al"], m["fx"], m["cu_inr"], m["al_inr"],
+                             m["ccu"], m["cal"], m["ie_cu"], m["ie_al"]])
     print(f"built prices.json: {len(daily)} days, {len(monthly)} months, latest {payload['latest']}")
 
 
@@ -293,6 +360,12 @@ def main() -> int:
             update_fx(fx_start.isoformat())
         except (urllib.error.URLError, TimeoutError, RuntimeError, OSError, ValueError) as exc:
             failures.append(f"usdinr: {exc}")
+
+        for name in COMEX:
+            try:
+                update_comex(name, backfill=bool(args.years))
+            except Exception as exc:  # optional source: warn, never fail the run
+                print(f"::warning title=COMEX {name} not updated::{exc}")
 
     build_outputs()
 

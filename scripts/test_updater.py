@@ -4,7 +4,9 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from update_prices import parse_metal_table, parse_number  # noqa: E402
+import datetime as dt  # noqa: E402
+
+from update_prices import parse_comex_chart, parse_metal_table, parse_number  # noqa: E402
 
 SAMPLE = """
 <html><body><table>
@@ -33,6 +35,14 @@ def main() -> int:
     assert parse_number("-") is None
     assert parse_number("12.750,00") is None  # German number format must not be misread
     assert parse_metal_table("<html><p>layout changed</p></html>", (1, 2)) == {}
+    # COMEX chart: four daily bars at midnight New York time; one gap, and the last one is today's open session.
+    chart = (
+        '{"chart":{"result":[{"meta":{"gmtoffset":-18000},'
+        '"timestamp":[1795064400,1795150800,1795237200,1795323600],'
+        '"indicators":{"quote":[{"close":[5.625,null,5.5465,5.60]}]}}],"error":null}}'
+    )
+    bars = parse_comex_chart(chart, (0.5, 30.0), dt.date(2026, 11, 22))
+    assert bars == {"2026-11-19": 5.625, "2026-11-21": 5.5465}, f"comex parser returned {bars}"
     print("parser self-test passed")
     return 0
 

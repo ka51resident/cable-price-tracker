@@ -10,7 +10,7 @@
     color-scheme: light;
     --page: #f5f4f1; --surface: #fcfcfb; --border: #e3e1da; --grid: #ebe9e3;
     --text: #0b0b0b; --text-2: #52514e; --text-3: #7b7a74;
-    --cu: #eb6834; --al: #2a78d6; --avg: #8a8984;
+    --cu: #eb6834; --al: #2a78d6; --cx: #1baf7a; --avg: #8a8984;
     --accent: #1f5fb0; --accent-ink: #ffffff;
     --ok-bg: #e7f3e7; --ok-ink: #0b5d0b; --warn-bg: #fdecd2; --warn-ink: #7a4a00; --info-bg: #e6eefa; --info-ink: #174a8c;
   }
@@ -19,7 +19,7 @@
       color-scheme: dark;
       --page: #121211; --surface: #1a1a19; --border: #32312e; --grid: #2a2927;
       --text: #f0efec; --text-2: #c3c2b7; --text-3: #94938a;
-      --cu: #d95926; --al: #3987e5; --avg: #8f8e86;
+      --cu: #d95926; --al: #3987e5; --cx: #199e70; --avg: #8f8e86;
       --accent: #6aa5ee; --accent-ink: #0b0b0b;
       --ok-bg: #163016; --ok-ink: #9fdc9f; --warn-bg: #3a2a0c; --warn-ink: #f2c879; --info-bg: #14263f; --info-ink: #a9c9f5;
     }
@@ -49,7 +49,7 @@
   .seg button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); }
   .charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 20px; }
   .chart h3 { font-size: 14px; margin: 0 0 2px; }
-  .legend { display: flex; gap: 14px; font-size: 12px; color: var(--text-2); margin-bottom: 4px; }
+  .legend { display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 12px; color: var(--text-2); margin-bottom: 4px; }
   .legend i { display: inline-block; width: 16px; height: 0; border-top: 2px solid; vertical-align: middle; margin-right: 5px; }
   .legend i.dash { border-top-style: dashed; }
   .plot { position: relative; }
@@ -110,10 +110,10 @@
     </div>
     <div class="charts">
       <div class="chart"><h3>Copper</h3>
-        <div class="legend"><span><i style="border-color:var(--cu)"></i>Daily cash settlement</span><span><i class="dash" style="border-color:var(--avg)"></i>30-day average</span></div>
+        <div class="legend"><span><i style="border-color:var(--cu)"></i>LME cash settlement</span><span><i style="border-color:var(--cx)"></i>COMEX futures</span><span><i class="dash" style="border-color:var(--avg)"></i>LME 30-day average</span></div>
         <div class="plot" id="plot-cu"></div></div>
       <div class="chart"><h3>Aluminium</h3>
-        <div class="legend"><span><i style="border-color:var(--al)"></i>Daily cash settlement</span><span><i class="dash" style="border-color:var(--avg)"></i>30-day average</span></div>
+        <div class="legend"><span><i style="border-color:var(--al)"></i>LME cash settlement</span><span><i style="border-color:var(--cx)"></i>COMEX futures</span><span><i class="dash" style="border-color:var(--avg)"></i>LME 30-day average</span></div>
         <div class="plot" id="plot-al"></div></div>
     </div>
   </section>
@@ -148,9 +148,8 @@
 
   <section class="card" aria-label="Monthly averages">
     <div class="row"><h2 style="margin:0">Monthly averages</h2><a class="btn" href="data/monthly_averages.csv" download>Download CSV</a></div>
-    <div class="scroll"><table id="monthly"><thead><tr>
-      <th>Month</th><th>Copper USD/t</th><th>Copper Rs/kg</th><th>Aluminium USD/t</th><th>Aluminium Rs/kg</th><th>USD/INR</th><th>Days</th>
-    </tr></thead><tbody></tbody></table></div>
+    <div class="scroll"><table id="monthly"><thead></thead><tbody></tbody></table></div>
+    <p class="muted" id="ieema-note" style="margin:10px 0 0;font-size:13px"></p>
   </section>
 
   <section class="card notes" aria-label="Notes">
@@ -160,6 +159,7 @@
       <li><b>Metal content</b> uses nominal conductor area: 8.89 kg/km per sq mm for copper and 2.703 for aluminium. 3.5 core uses the standard reduced neutral. Screens, armour and insulation are not counted.</li>
       <li><b>Gap</b> is the new rate minus what the earlier rate would be after the metal move. Gaps under 4% are treated as noise. Compare like with like: same make, same construction.</li>
       <li>If a date falls on a holiday or weekend, the last trading day before it is used.</li>
+      <li><b>LME</b> is the benchmark Indian cable pricing follows, and the quote checker uses it. <b>COMEX</b> is the US futures market, shown for comparison only: it is the nearest-month contract, converted from US dollars per pound for copper, and it can sit well above or below LME because of US tariffs and freight. <b>IEEMA</b> is the Indian industry reference, published monthly.</li>
     </ul>
     <p class="muted" id="sources"></p>
   </section>
@@ -188,6 +188,13 @@
   }
 
   /* ---------- tiles ---------- */
+  function comexRow(key, unit, f, u) {
+    for (var i = state.daily.length - 1; i >= 0; i--) {
+      var r = state.daily[i], c = value(r, "c" + key, unit), l = value(r, key, unit);
+      if (c != null && l != null) return '<dt>COMEX on ' + niceDate(r.d).replace(/ \d{4}$/, "") + ', vs LME</dt><dd>' + f.format(c) + ' (' + pct((c - l) / l) + ')</dd>';
+    }
+    return '<dt>COMEX</dt><dd>n/a</dd>';
+  }
   function renderTiles() {
     var d = state.daily, last = d[d.length - 1], prev = d[d.length - 2];
     var hasFx = last.fx != null;
@@ -209,7 +216,7 @@
         '<dl><dt>vs previous day</dt><dd>' + vs(before) + '</dd>' +
         '<dt>vs 30-day average (' + (ma30 == null ? "n/a" : f.format(ma30)) + ')</dt><dd>' + vs(ma30) + '</dd>' +
         '<dt>' + niceMonth(ym) + ' average so far</dt><dd>' + f.format(mavg) + ' ' + u + '</dd>' +
-        '<dt>' + last.d.slice(0, 4) + ' average so far</dt><dd>' + f.format(yavg) + ' ' + u + '</dd></dl></div>';
+        '<dt>' + last.d.slice(0, 4) + ' average so far</dt><dd>' + f.format(yavg) + ' ' + u + '</dd>' + comexRow(key, unit, f, u) + '</dl></div>';
     });
     html += '<div class="tile"><div class="label">USD/INR</div>' +
       '<div class="big">' + (hasFx ? "₹" + fmt2.format(last.fx) : "n/a") + ' <span class="unit">per US dollar</span></div>' +
@@ -245,11 +252,11 @@
     var unit = state.unit, all = state.daily;
     var series = all.map(function (r) { return value(r, metal, unit); });
     var maAll = Calc.movingAverage(series, 30);
-    var from = rangeRows(), rows = [], vals = [], ma = [];
-    all.forEach(function (r, i) { if (r.d >= from && series[i] != null) { rows.push(r); vals.push(series[i]); ma.push(maAll[i]); } });
+    var from = rangeRows(), rows = [], vals = [], ma = [], cx = [];
+    all.forEach(function (r, i) { if (r.d >= from && series[i] != null) { rows.push(r); vals.push(series[i]); ma.push(maAll[i]); cx.push(value(r, "c" + metal, unit)); } });
     if (rows.length < 2) { el.innerHTML = '<p class="muted">Not enough data for this view yet.</p>'; return; }
     var W = Math.max(300, el.clientWidth), H = 230, L = unit === "inr" ? 46 : 54, R = 10, T = 10, B = 24;
-    var pool = vals.concat(ma.filter(function (v) { return v != null; }));
+    var pool = vals.concat(ma, cx).filter(function (v) { return v != null; });
     var lo = Math.min.apply(null, pool), hi = Math.max.apply(null, pool), pad = (hi - lo) * 0.08 || 1;
     lo -= pad; hi += pad;
     var x = function (i) { return L + (W - L - R) * i / (rows.length - 1); };
@@ -270,6 +277,7 @@
     });
     function path(arr) { var p = "", pen = false; arr.forEach(function (v, i) { if (v == null) { pen = false; return; } p += (pen ? "L" : "M") + x(i).toFixed(1) + " " + y(v).toFixed(1); pen = true; }); return p; }
     svg += '<path d="' + path(ma) + '" fill="none" stroke="var(--avg)" stroke-width="1.5" stroke-dasharray="5 4"/>' +
+           '<path d="' + path(cx) + '" fill="none" stroke="var(--cx)" stroke-width="1.5" stroke-linejoin="round"/>' +
            '<path d="' + path(vals) + '" fill="none" stroke="var(' + colorVar + ')" stroke-width="2" stroke-linejoin="round"/>' +
            '<line class="xh" y1="' + T + '" y2="' + (H - B) + '" stroke="var(--text-3)" stroke-width="1" visibility="hidden"/>' +
            '<circle class="dot" r="4.5" fill="var(' + colorVar + ')" stroke="var(--surface)" stroke-width="2" visibility="hidden"/>' +
@@ -282,7 +290,9 @@
       xh.setAttribute("x1", x(i)); xh.setAttribute("x2", x(i)); xh.setAttribute("visibility", "visible");
       dot.setAttribute("cx", x(i)); dot.setAttribute("cy", y(vals[i])); dot.setAttribute("visibility", "visible");
       var u = unit === "inr" ? " Rs/kg" : " USD/t";
-      tip.innerHTML = niceDate(rows[i].d) + '<br><b>' + fmt2.format(vals[i]) + '</b>' + u + (ma[i] != null ? '<br>30-day avg ' + fmt2.format(ma[i]) : '');
+      tip.innerHTML = niceDate(rows[i].d) + '<br>LME <b>' + fmt2.format(vals[i]) + '</b>' + u +
+        (cx[i] != null ? '<br>COMEX <b>' + fmt2.format(cx[i]) + '</b> (' + pct((cx[i] - vals[i]) / vals[i]) + ')' : '') +
+        (ma[i] != null ? '<br>LME 30-day avg ' + fmt2.format(ma[i]) : '');
       tip.style.display = "block";
       var left = x(i) * box.width / W + 12; if (left + tip.offsetWidth > box.width) left = x(i) * box.width / W - tip.offsetWidth - 12;
       tip.style.left = left + "px"; tip.style.top = "8px";
@@ -304,11 +314,21 @@
   /* ---------- monthly table ---------- */
   function renderMonthly() {
     var last = state.daily[state.daily.length - 1].d.slice(0, 7);
+    var hasIe = state.monthly.some(function (m) { return m.ie_cu != null || m.ie_al != null; });
     function c(v, f) { return v == null ? "n/a" : f.format(v); }
-    $("monthly").querySelector("tbody").innerHTML = state.monthly.slice().reverse().map(function (m) {
-      return "<tr><td>" + niceMonth(m.m) + (m.m === last ? ' <span class="muted">(so far)</span>' : "") + "</td><td>" + c(m.cu, fmt0) + "</td><td>" + c(m.cu_inr, fmt2) +
-        "</td><td>" + c(m.al, fmt0) + "</td><td>" + c(m.al_inr, fmt2) + "</td><td>" + c(m.fx, fmt2) + "</td><td>" + m.days + "</td></tr>";
+    var cols = [["Month"], ["LME copper USD/t", "cu", fmt0], ["COMEX copper USD/t", "ccu", fmt0], ["LME copper Rs/kg", "cu_inr", fmt2]];
+    if (hasIe) cols.push(["IEEMA copper Rs/kg", "ie_cu", fmt2]);
+    cols.push(["LME aluminium USD/t", "al", fmt0], ["COMEX aluminium USD/t", "cal", fmt0], ["LME aluminium Rs/kg", "al_inr", fmt2]);
+    if (hasIe) cols.push(["IEEMA aluminium Rs/kg", "ie_al", fmt2]);
+    cols.push(["USD/INR", "fx", fmt2]);
+    var t = $("monthly");
+    t.querySelector("thead").innerHTML = "<tr>" + cols.map(function (x) { return "<th>" + x[0] + "</th>"; }).join("") + "<th>Days</th></tr>";
+    t.querySelector("tbody").innerHTML = state.monthly.slice().reverse().map(function (m) {
+      return "<tr><td>" + niceMonth(m.m) + (m.m === last ? ' <span class="muted">(so far)</span>' : "") + "</td>" +
+        cols.slice(1).map(function (x) { return "<td>" + c(m[x[1]], x[2]) + "</td>"; }).join("") + "<td>" + m.days + "</td></tr>";
     }).join("");
+    $("ieema-note").textContent = hasIe ? "IEEMA figures are entered by hand from the monthly circular." :
+      "IEEMA monthly prices are not entered yet. Add them to data/ieema.csv in the repository and they will appear here beside the LME figures.";
   }
 
   /* ---------- quote checker ---------- */
@@ -369,7 +389,7 @@
     var first = state.daily[0].d, last = state.daily[state.daily.length - 1].d;
     ["q-dateA", "q-dateB"].forEach(function (id) { $(id).min = first; });
     $("q-dateB").value = last;
-    $("sources").textContent = "Sources: " + data.sources.metals + ". " + data.sources.fx + ". For internal reference only, not for trading. Data file: data/prices.json.";
+    $("sources").textContent = "Sources: " + data.sources.metals + ". " + data.sources.fx + ". " + (data.sources.comex || "") + ". For internal reference only, not for trading. Data file: data/prices.json.";
     if (state.daily[state.daily.length - 1].fx == null) {
       state.unit = "usd";
       Array.prototype.forEach.call($("unitSeg").querySelectorAll("button"), function (b) { b.setAttribute("aria-pressed", b.getAttribute("data-unit") === "usd" ? "true" : "false"); });

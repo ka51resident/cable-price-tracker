@@ -43,6 +43,10 @@ def main() -> int:
     )
     bars = parse_comex_chart(chart, (0.5, 30.0), dt.date(2026, 11, 22))
     assert bars == {"2026-11-19": 5.625, "2026-11-21": 5.5465}, f"comex parser returned {bars}"
+    # Daylight saving: Monday 5 Oct 2026 midnight New York is 04:00 UTC and must stay a Monday.
+    summer = '{"chart":{"result":[{"meta":{"gmtoffset":-18000},"timestamp":[%d],"indicators":{"quote":[{"close":[6.1]}]}}]}}' % int(
+        (dt.datetime(2026, 10, 5, 4, 0) - dt.datetime(1970, 1, 1)).total_seconds())
+    assert parse_comex_chart(summer, (0.5, 30.0), dt.date(2026, 11, 22)) == {"2026-10-05": 6.1}
     print("parser self-test passed")
     return 0
 

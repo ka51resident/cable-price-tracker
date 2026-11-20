@@ -207,7 +207,6 @@ def parse_comex_chart(text: str, valid_range: tuple[float, float], today: dt.dat
     Bars dated today or later are dropped because the session is still open.
     """
     result = json.loads(text)["chart"]["result"][0]
-    offset = int(result.get("meta", {}).get("gmtoffset", 0))
     stamps = result.get("timestamp") or []
     closes = result["indicators"]["quote"][0].get("close") or []
     lo, hi = valid_range
@@ -215,7 +214,10 @@ def parse_comex_chart(text: str, valid_range: tuple[float, float], today: dt.dat
     for stamp, close in zip(stamps, closes):
         if not isinstance(close, (int, float)) or not (lo <= close <= hi):
             continue
-        date = (dt.datetime(1970, 1, 1) + dt.timedelta(seconds=int(stamp) + offset)).date()
+        # Daily bars are stamped at midnight New York time (04:00 or 05:00 UTC
+        # depending on daylight saving), so shifting by 12 hours gives the
+        # session date in every season.
+        date = (dt.datetime(1970, 1, 1) + dt.timedelta(seconds=int(stamp), hours=12)).date()
         if date >= today:
             continue
         out[date.isoformat()] = float(close)
